@@ -1,0 +1,93 @@
+@Metadata.layer: #CORE
+
+@UI.headerInfo: {
+    typeName: 'Order Approval',
+    typeNamePlural: 'Order Approvals',
+    title: {
+        type: #STANDARD,
+        value: 'Vbeln'
+    }
+}
+
+annotate view ZVC_ORDER_APPR with
+{
+    @UI.facet: [
+        {
+            id: 'OrderDetails',
+            purpose: #STANDARD,
+            type: #FIELDGROUP_REFERENCE,
+            targetQualifier: 'OrderDetails',
+            label: 'Order Details',
+            position: 10
+        }
+    ]
+
+@UI.lineItem: [
+  { position: 10, label: 'Sales Order' },
+  {
+    position: 60,
+    type: #FOR_ACTION,
+    dataAction: 'approve',
+    label: 'Approve'
+  },
+  {
+  position: 70,
+  type: #FOR_ACTION,
+  dataAction: 'reject',
+  label: 'Reject',
+  importance: #HIGH
+},
+{
+  position: 80,
+  type: #FOR_ACTION,
+  dataAction: 'convertCurrency',
+  label: 'Convert Currency',
+  importance: #HIGH
+},
+{ 
+    position: 90,
+    type: #FOR_ACTION,
+    dataAction: 'checkShipping',
+    label: 'Check Shipping',
+    importance : #HIGH
+}
+]
+
+@UI.fieldGroup: [
+  { qualifier: 'OrderDetails', position: 10, label: 'Sales Order' }
+]
+Vbeln;
+
+    @UI.lineItem: [{ position: 20, label: 'Approval Status' }]
+    @UI.fieldGroup: [{ qualifier: 'OrderDetails', position: 20, label: 'Approval Status' }]
+    ApprovalStatus;
+
+    @UI.lineItem: [{ position: 30, label: 'Validation Status' }]
+    @UI.fieldGroup: [{ qualifier: 'OrderDetails', position: 30, label: 'Validation Status' }]
+    ValidationStatus;
+
+    @UI.lineItem: [{ position: 40, label: 'Approved By' }]
+    @UI.fieldGroup: [{ qualifier: 'OrderDetails', position: 40, label: 'Approved By' }]
+    ApprovesBy;
+
+    @UI.lineItem: [{ position: 50, label: 'Approved On' }]
+    @UI.fieldGroup: [{ qualifier: 'OrderDetails', position: 50, label: 'Approved On' }]
+    ApprovedOn;
+    
+    @UI.lineItem: [{ position: 60, label: 'Converted Amount' }]
+    @UI.fieldGroup: [{ qualifier: 'OrderDetails', position: 60, label: 'Countered Amount' }]
+    ConvertedAmount;
+    
+    @UI.lineItem: [{ position: 70, label: 'Targeted Currency' }]
+    @UI.fieldGroup: [{ qualifier: 'OrderDetails', position: 70, label: 'Targeted Currency' }]
+    TargetCurrency;
+    
+    @UI.lineItem: [{ position: 80, label: 'ShippingStatus'}]
+    @UI.fieldGroup: [{ qualifier: 'OrderDetails', position: 80, label: 'ShippingStatus' }]
+    ShippingStatus;
+
+    @UI.lineItem: [{ position: 90, label: 'DeliveryDays' }]
+    @UI.identification: [{ qualifier: 'OrderDetails', position: 90, label: 'DeliveryDays' }]
+    DeliveryDays;
+
+}
