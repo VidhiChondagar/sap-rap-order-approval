@@ -1,0 +1,24 @@
+
+projection;
+strict ( 2 );
+
+define behavior for ZVC_Order_Appr //alias <alias_name>
+{
+  use create;
+  use update;
+  use delete;
+  use association _Validation {create; }
+  use action approve;
+  use action reject;
+  use action convertCurrency;
+  use action checkShipping;
+
+}
+
+define behavior for zvc_order_val{
+
+    use update;
+    use delete;
+    use association _Parent;
+
+}
