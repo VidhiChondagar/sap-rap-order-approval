@@ -1,0 +1,33 @@
+CLASS zvcl_shipping_api DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+  METHODS get_shipping_details
+    IMPORTING
+    iv_vbeln  TYPE vbeln_va
+    EXPORTING
+       ev_shipping_status type zvde_shipping_status
+       ev_delivery_days type int4.
+
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zvcl_shipping_api IMPLEMENTATION.
+
+METHOD get_shipping_details.
+
+ "Mock Shipping API response
+    ev_shipping_status = 'SHIPPED'.
+    ev_delivery_days   = 3.
+
+endmethod.
+
+
+ENDCLASS.
