@@ -1,0 +1,463 @@
+CLASS lhc_zvi_order_appr DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+
+    METHODS get_instance_authorizations FOR INSTANCE AUTHORIZATION
+      IMPORTING keys REQUEST requested_authorizations FOR zvi_order_appr RESULT result.
+    METHODS validateorderitem FOR VALIDATE ON SAVE
+      IMPORTING keys FOR zvi_order_appr~validateorderitem.
+    METHODS setinitialstatus FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR zvi_order_appr~setinitialstatus.
+    METHODS setvalidationstatus FOR DETERMINE ON SAVE
+      IMPORTING keys FOR zvi_order_appr~setvalidationstatus.
+    METHODS approve FOR MODIFY
+      IMPORTING keys FOR ACTION zvi_order_appr~approve RESULT result.
+    METHODS reject FOR MODIFY
+      IMPORTING keys FOR ACTION zvi_order_appr~reject RESULT result.
+    METHODS convertcurrency FOR MODIFY
+      IMPORTING keys FOR ACTION zvi_order_appr~convertcurrency RESULT result.
+    METHODS checkshipping FOR MODIFY
+      IMPORTING keys FOR ACTION zvi_order_appr~checkshipping RESULT result.
+
+ENDCLASS.
+
+CLASS lhc_zvi_order_appr IMPLEMENTATION.
+
+  METHOD get_instance_authorizations.
+  ENDMETHOD.
+
+  METHOD validateOrderItem.
+
+    "1. Read all Sales Orders coming from RAP
+  READ ENTITIES OF zvi_order_appr IN LOCAL MODE
+    ENTITY zvi_order_appr
+    FIELDS ( Vbeln )
+    WITH CORRESPONDING #( keys )
+    RESULT DATA(lt_order).
+
+  IF lt_order IS INITIAL.
+    RETURN.
+  ENDIF.
+
+
+  "2. Read VBAP only ONCE for all Sales Orders
+  SELECT vbeln,
+         posnr,
+         matnr,
+         kwmeng
+    FROM vbap
+    FOR ALL ENTRIES IN @lt_order
+    WHERE vbeln = @lt_order-Vbeln
+    INTO TABLE @DATA(lt_vbap).
+
+
+  "Sorting because we will use BINARY SEARCH
+  SORT lt_order BY Vbeln.
+  SORT lt_vbap  BY vbeln.
+
+
+  "3. Check whether each Sales Order has items
+  LOOP AT lt_order INTO DATA(ls_order).
+
+
+
+    READ TABLE lt_vbap
+      TRANSPORTING NO FIELDS
+      WITH KEY vbeln = ls_order-Vbeln
+      BINARY SEARCH.
+
+    IF sy-subrc <> 0.
+
+      APPEND VALUE #(
+        %tky = ls_order-%tky
+      ) TO failed-zvi_order_appr.
+
+      APPEND VALUE #(
+        %tky = ls_order-%tky
+        %msg = new_message(
+          id       = 'ZVMESSAGETEXT'
+          number   = '009'
+          severity = if_abap_behv_message=>severity-error
+          v1       = ls_order-Vbeln
+        )
+      ) TO reported-zvi_order_appr.
+
+    ENDIF.
+
+  ENDLOOP.
+
+
+  "4. Validate every VBAP item
+  LOOP AT lt_vbap INTO DATA(ls_vbap).
+
+    "Find the RAP order this item belongs to
+    READ TABLE lt_order
+      INTO ls_order
+      WITH KEY Vbeln = ls_vbap-vbeln
+      BINARY SEARCH.
+
+    IF sy-subrc <> 0.
+      CONTINUE.
+    ENDIF.
+
+
+    IF ls_vbap-matnr IS INITIAL.
+
+      APPEND VALUE #(
+        %tky = ls_order-%tky
+      ) TO failed-zvi_order_appr.
+
+      APPEND VALUE #(
+        %tky = ls_order-%tky
+        %msg = new_message(
+          id       = 'ZVMESSAGETEXT'
+          number   = '007'
+          severity = if_abap_behv_message=>severity-error
+          v1       = ls_vbap-posnr
+        )
+      ) TO reported-zvi_order_appr.
+
+
+    ELSEIF ls_vbap-kwmeng <= 0.
+
+      APPEND VALUE #(
+        %tky = ls_order-%tky
+      ) TO failed-zvi_order_appr.
+
+      APPEND VALUE #(
+        %tky = ls_order-%tky
+        %msg = new_message(
+          id       = 'ZVMESSAGETEXT'
+          number   = '008'
+          severity = if_abap_behv_message=>severity-error
+          v1       = ls_vbap-posnr
+        )
+      ) TO reported-zvi_order_appr.
+
+    ENDIF.
+
+  ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD setInitialstatus.
+
+  MODIFY ENTITIES OF zvi_order_appr in LOCAL MODE
+  ENTITY zvi_order_appr
+  UPDATE FIELDS ( ApprovalStatus ValidationStatus )
+  WITH VALUE #(
+   FOR key in keys (
+        %tky =  key-%tky
+        ApprovalStatus = 'P'
+        ValidationStatus = 'P'
+
+    )
+   ).
+
+
+
+  ENDMETHOD.
+
+  METHOD setValidationStatus.
+
+  "Read sales orders being created
+  READ ENTITIES OF zvi_order_appr IN LOCAL MODE
+    ENTITY zvi_order_appr
+    FIELDS ( Vbeln )
+    WITH CORRESPONDING #( keys )
+    RESULT DATA(lt_order).
+
+  IF lt_order IS INITIAL.
+    RETURN.
+  ENDIF.
+
+
+  "Read all VBAP items in one DB call
+  SELECT vbeln,
+         posnr,
+         matnr,
+         kwmeng
+    FROM vbap
+    FOR ALL ENTRIES IN @lt_order
+    WHERE vbeln = @lt_order-Vbeln
+    INTO TABLE @DATA(lt_vbap).
+
+
+  "Keep validation result for every order
+  TYPES:
+    BEGIN OF ty_status,
+      vbeln     TYPE vbeln_va,
+      has_items TYPE abap_bool,
+      has_error TYPE abap_bool,
+    END OF ty_status.
+
+  DATA lt_status TYPE HASHED TABLE OF ty_status
+                 WITH UNIQUE KEY vbeln.
+
+
+  "Initially register every sales order
+  LOOP AT lt_order INTO DATA(ls_order).
+
+    INSERT VALUE #(
+      vbeln     = ls_order-Vbeln
+      has_items = abap_false
+      has_error = abap_false
+    ) INTO TABLE lt_status.
+
+  ENDLOOP.
+
+
+  "Check all VBAP items - no nested loop
+  LOOP AT lt_vbap INTO DATA(ls_vbap).
+
+    READ TABLE lt_status
+      ASSIGNING FIELD-SYMBOL(<ls_status>)
+      WITH TABLE KEY vbeln = ls_vbap-vbeln.
+
+    IF sy-subrc = 0.
+
+      <ls_status>-has_items = abap_true.
+
+      IF ls_vbap-matnr IS INITIAL
+         OR ls_vbap-kwmeng <= 0.
+
+        <ls_status>-has_error = abap_true.
+
+      ENDIF.
+
+    ENDIF.
+
+  ENDLOOP.
+
+
+  "Prepare RAP updates
+  DATA lt_update TYPE TABLE FOR UPDATE zvi_order_appr.
+
+  LOOP AT lt_order INTO ls_order.
+
+    READ TABLE lt_status
+      ASSIGNING <ls_status>
+      WITH TABLE KEY vbeln = ls_order-Vbeln.
+
+    IF <ls_status>-has_items = abap_false
+       OR <ls_status>-has_error = abap_true.
+
+      APPEND VALUE #(
+        %tky             = ls_order-%tky
+        ValidationStatus = 'F'
+      ) TO lt_update.
+
+    ELSE.
+
+      APPEND VALUE #(
+        %tky             = ls_order-%tky
+        ValidationStatus = 'S'
+      ) TO lt_update.
+
+    ENDIF.
+
+  ENDLOOP.
+
+
+  "Update RAP buffer once
+  MODIFY ENTITIES OF zvi_order_appr IN LOCAL MODE
+    ENTITY zvi_order_appr
+    UPDATE FIELDS ( ValidationStatus )
+    WITH lt_update.
+
+ENDMETHOD.
+
+  METHOD approve.
+
+  "Read selected orders
+  READ ENTITIES OF zvi_order_appr IN LOCAL MODE
+  ENTITY zvi_order_appr
+  FIELDS ( Vbeln ValidationStatus ApprovalStatus )
+  WITH CORRESPONDING #( keys )
+  RESULT data(lt_order).
+
+  LOOP AT lt_order
+  INTO data(ls_order).
+
+  "Successfully validated orders can be approved
+  if ls_order-ValidationStatus <> 'S'.
+    APPEND VALUE #(
+    %tky = ls_order-%tky
+     ) to failed-zvi_order_appr.
+
+   APPEND VALUE #(
+   %tky = ls_order-%tky
+   %msg = new_message(
+    id = 'ZVMESSAGETEXT'
+    number = '009'
+    severity = if_abap_behv_message=>severity-error
+    v1 = ls_order-Vbeln
+    )
+    ) to reported-zvi_order_appr.
+
+    CONTINUE.
+  endif.
+
+  "Approve the orders
+  MODIFY ENTITIES OF zvi_order_appr IN LOCAL MODE
+  ENTITY zvi_order_appr
+  UPDATE FIELDS ( ApprovalStatus ApprovedOn ApprovesBy )
+  WITH VALUE #(
+  (
+     %tky = ls_order-%tky
+     ApprovalStatus = 'A'
+     ApprovesBy = sy-uname
+     ApprovedOn = sy-datum
+   )
+    ).
+   ENDLOOP.
+
+   "Displaying updated entines in Fiori
+
+   READ ENTITIES OF zvi_order_appr IN LOCAL MODE
+   ENTITY zvi_order_appr
+   ALL FIELDS WITH CORRESPONDING #( keys )
+   RESULT data(lt_result).
+
+   result = VALUE #(
+   FOR ls_result IN lt_result
+   (
+    %tky = ls_result-%tky
+    %param = ls_result
+     )
+   ).
+
+
+
+  ENDMETHOD.
+
+  METHOD reject.
+
+  MODIFY ENTITIES OF zvi_order_appr IN LOCAL MODE
+  ENTITY zvi_order_appr
+  UPDATE FIELDS ( ApprovalStatus ApprovesBy ApprovedOn )
+  WITH VALUE #(
+    for key in keys (
+        %tky = key-%tky
+        ApprovalStatus = 'R'
+        ApprovesBy = ''
+        ApprovedOn = '00000000'
+
+
+     )
+   ).
+
+   READ ENTITIES OF zvi_order_appr in LOCAL MODE
+   ENTITY zvi_order_appr
+   ALL FIELDS WITH CORRESPONDING #( keys )
+   RESULT data(lt_result).
+
+   result = VALUE #(
+   for ls_results IN lt_result (
+     %tky = ls_results-%tky
+     %param = ls_results
+     )
+    ).
+
+
+  ENDMETHOD.
+
+  METHOD convertCurrency.
+
+  read ENTITIES OF zvi_order_appr
+  ENTITY zvi_order_appr
+  FIELDS ( vbeln )
+  WITH CORRESPONDING #( keys )
+  RESULT data(lt_order).
+
+  SELECT netwr, waerk
+  from vbak
+  for ALL ENTRIES IN @lt_order
+  WHERE vbeln = @lt_order-vbeln
+  into table @data(lt_vbak).
+
+  READ TABLE lt_vbak INTO DATA(ls_vbak) INDEX 1.
+  data(lo_currency_api) = new zvcl_currency_api( ).
+
+  DATA(lv_amount) = CONV decfloat34( ls_vbak-netwr ).
+
+lo_currency_api->get_rate(
+  EXPORTING
+    iv_from_currency    = ls_vbak-waerk
+    iv_to_currency      = 'INR'
+    iv_amount           = lv_amount
+  IMPORTING
+    ev_converted_amount = DATA(lv_converted_amount)
+).
+
+    MODIFY ENTITIES OF zvi_order_appr IN LOCAL MODE
+  ENTITY zvi_order_appr
+  UPDATE FIELDS ( TargetCurrency ConvertedAmount )
+  WITH VALUE #(
+    FOR key IN keys (
+      %tky            = key-%tky
+      TargetCurrency  = 'INR'
+      ConvertedAmount = lv_converted_amount
+    )
+  ).
+
+
+  ENDMETHOD.
+
+  METHOD checkShipping.
+
+  READ ENTITIES OF zvi_order_appr IN LOCAL MODE
+  ENTITY zvi_order_appr
+  FIELDS ( Vbeln )
+  WITH CORRESPONDING #( keys )
+  RESULT data(lt_orders).
+
+  DATA(lo_shipping_api) = NEW zvcl_shipping_api( ).
+
+  LOOP AT lt_orders
+  INTO data(ls_orders).
+
+  data lv_shipping_status type zvde_shipping_status.
+  data lv_delivery_days type int4.
+
+  lo_shipping_api->get_shipping_details(
+    EXPORTING
+      iv_vbeln           = ls_orders-Vbeln
+    IMPORTING
+      ev_shipping_status = lv_shipping_status
+      ev_delivery_days   = lv_delivery_days
+  ).
+
+  MODIFY ENTITIES OF zvi_order_appr IN LOCAL MODE
+  ENTITY zvi_order_appr
+  UPDATE FIELDS ( DeliveryDays ShippingStatus )
+  WITH VALUE #(
+  (
+    %tky = ls_orders-%tky
+    ShippingStatus = lv_shipping_status
+    DeliveryDays = lv_delivery_days
+
+   )
+
+
+   ).
+
+  ENDLOOP.
+
+  READ ENTITIES OF zvi_order_appr IN LOCAL MODE
+  ENTITY zvi_order_appr
+  ALL FIELDS WITH CORRESPONDING #( keys )
+  RESULT data(lt_result).
+
+
+  result = VALUE #(
+  FOR ls_result IN lt_result
+  (
+    %tky = ls_result-%tky
+    %param = ls_result
+     )
+   ).
+
+
+  ENDMETHOD.
+
+ENDCLASS.
