@@ -1,0 +1,60 @@
+managed implementation in class zbp_vi_order_appr unique;
+strict ( 2 );
+
+define behavior for ZVI_ORDER_APPR
+persistent table ZVT_ORDER_APPRV
+lock master
+authorization master ( instance )
+etag master LocalLastChangedAt
+{
+  create;
+  update;
+  delete;
+
+  field ( readonly : update ) Vbeln;
+  field (readonly ) ApprovalStatus;
+  field ( readonly ) ValidationStatus;
+
+  association _Validation { create; }
+
+  validation validateOrderItem on save { create; update; }
+
+  determination setInitialstatus on modify { create; }
+  determination setValidationStatus on save { create; }
+
+    action approve result [1] $self;
+    action reject result [1] $self;
+    action convertCurrency result [1] $self;
+    action checkShipping result [1] $self;
+
+  mapping for zvt_order_apprv
+  {
+    Vbeln = vbeln;
+    ApprovalStatus = approval_status;
+    ValidationStatus = validation_status;
+    ApprovedOn = approved_on;
+    ApprovesBy = approves_by;
+    LocalLastChangedAt = local_last_changed_at;
+    ConvertedAmount = converted_amount;
+    TargetCurrency = target_currency;
+    DeliveryDays = delivery_days;
+    ShippingStatus = shipping_status;
+
+
+  }
+}
+
+define behavior for ZVI_ORDER_VAL
+persistent table ZVT_ORDER_VAL
+lock dependent by _Parent
+authorization dependent by _Parent
+{
+  update;
+  delete;
+
+  field ( readonly : update ) Vbeln;
+  field ( readonly : update ) Posnr;
+  field ( readonly : update ) ValidationType;
+
+  association _Parent;
+}
