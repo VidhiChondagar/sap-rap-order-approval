@@ -1,0 +1,20 @@
+@AbapCatalog.viewEnhancementCategory: [#NONE]
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Child entity on Order validation'
+@Metadata.ignorePropagatedAnnotations: true
+@ObjectModel.usageType:{
+    serviceQuality: #X,
+    sizeCategory: #S,
+    dataClass: #MIXED
+}
+define view entity zvi_order_val as select from zvt_order_val
+association to parent zvi_order_appr as _Parent on _Parent.Vbeln = $projection.Vbeln
+{
+    key vbeln as Vbeln,
+    key posnr as Posnr,
+    key validation_type as ValidationType,
+    matnr as Matnr,
+    validation_status as ValidationStatus,
+    validation_msg as ValidationMsg,
+    _Parent 
+}
