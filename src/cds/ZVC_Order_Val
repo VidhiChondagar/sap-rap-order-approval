@@ -1,0 +1,16 @@
+@EndUserText.label: 'Projection View for Order Validation'
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+define view entity zvc_Order_val 
+as projection on zvi_order_val
+{
+     
+     key Vbeln,
+     key Posnr,
+     key ValidationType,
+     Matnr,
+     ValidationStatus,
+     ValidationMsg,
+     /* Associations */
+     _Parent : redirected to parent ZVC_Order_Appr
+    
+}
