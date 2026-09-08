@@ -1,0 +1,51 @@
+CLASS zvcl_currency_api DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC.
+
+  PUBLIC SECTION.
+
+    METHODS get_rate
+      IMPORTING
+        iv_from_currency      TYPE waers
+        iv_to_currency        TYPE waers
+        iv_amount             TYPE decfloat34
+      EXPORTING
+        ev_converted_amount   TYPE decfloat34.
+
+ENDCLASS.
+
+
+CLASS zvcl_currency_api IMPLEMENTATION.
+
+  METHOD get_rate.
+
+
+  DATA lv_response TYPE string.
+
+  TYPES:
+    BEGIN OF ty_response,
+      new_amount   TYPE decfloat34,
+      new_currency TYPE string,
+      old_currency TYPE string,
+      old_amount   TYPE decfloat34,
+    END OF ty_response.
+
+  DATA ls_response TYPE ty_response.
+
+  lv_response =
+    '{"new_amount":105000.50,"new_currency":"AUD","old_currency":"GBP","old_amount":5000}'.
+
+  /ui2/cl_json=>deserialize(
+    EXPORTING
+      json = lv_response
+    CHANGING
+      data = ls_response
+  ).
+
+  ev_converted_amount = ls_response-new_amount.
+
+
+  ENDMETHOD.
+
+ENDCLASS.
