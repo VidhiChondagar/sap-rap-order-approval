@@ -1,0 +1,24 @@
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'CDS for approval header table'
+
+define root view entity ZVI_ORDER_APPR
+  as select from zvt_order_apprv
+
+  composition [0..*] of zvi_order_val as _Validation
+{
+    key zvt_order_apprv.vbeln                 as Vbeln,
+        zvt_order_apprv.approval_status       as ApprovalStatus,
+        zvt_order_apprv.validation_status     as ValidationStatus,
+        zvt_order_apprv.approves_by           as ApprovesBy,
+        zvt_order_apprv.approved_on           as ApprovedOn,
+        zvt_order_apprv.local_last_changed_at as LocalLastChangedAt,
+
+        zvt_order_apprv.target_currency       as TargetCurrency,
+        shipping_status as ShippingStatus,
+        delivery_days as DeliveryDays,
+
+        @Semantics.amount.currencyCode: 'TargetCurrency'
+        zvt_order_apprv.converted_amount      as ConvertedAmount,
+
+        _Validation
+}
