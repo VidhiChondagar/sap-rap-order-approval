@@ -1,0 +1,21 @@
+@EndUserText.label: 'Projection View for Order Approval'
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@Metadata.allowExtensions: true
+
+define root view entity ZVC_ORDER_APPR
+  as projection on ZVI_ORDER_APPR
+{
+    key Vbeln,
+        ApprovalStatus,
+        ValidationStatus,
+        ApprovesBy,
+        ApprovedOn,
+        LocalLastChangedAt,
+        ConvertedAmount,
+        TargetCurrency,
+        ShippingStatus,
+        DeliveryDays,
+        /*Assosiations*/
+        _Validation : redirected to composition child zvc_Order_val
+        
+}
